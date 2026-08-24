@@ -39,11 +39,6 @@ A robust, enterprise-grade Inventory and Order Management Web API built using **
            | 1 : N                                     | N : 1
            v                                           v
   +-------------------------------------------------------+
-  |                         Order                         |
-  +-------------------------------------------------------+
-  | - Id (PK), CustomerId (FK), OrderDate, Status, Total  |
-  +-------------------------------------------------------+
-
 
 📝 EF Core Migrations
 The project includes meaningful database migrations tracking schema evolutions:
@@ -62,7 +57,7 @@ Step-by-Step Run Guide
 Clone the Repository:
 
 Bash
-git clone [https://github.com/iqra-azam47/ASP.NetCore.git](https://github.com/iqra-azam47/ASP.NetCore.git)
+git clone https://github.com/iqra-azam47/ASP.NetCore.git
 cd ASP.NetCore/OrderInventory.Api
 Configure Connection String:
 Open appsettings.json and update your SQL Server connection string under ConnectionStrings:DefaultConnection.
@@ -91,3 +86,7 @@ Unit of Work (IUnitOfWork):
 Acts as a single coordinator for multiple repository transactions.
 
 In operations like CreateOrder (where stocks are deducted, order items are mapped, and the order record is added), _unitOfWork.SaveChangesAsync() ensures that all changes are committed in a single atomized database transaction, preventing partial data corruption if any step fails.
+  |                         Order                         |
+  +-------------------------------------------------------+
+  | - Id (PK), CustomerId (FK), OrderDate, Status, Total  |
+  +-------------------------------------------------------+
