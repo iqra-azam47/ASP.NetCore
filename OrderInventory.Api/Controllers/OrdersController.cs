@@ -17,7 +17,6 @@ namespace OrderInventory.Api.Controllers
             _unitOfWork = unitOfWork;
         }
 
-      
         [HttpGet]
         public async Task<ActionResult<PagedResult<OrderDto>>> GetOrders(
             [FromQuery] int pageNumber = 1,
@@ -39,7 +38,6 @@ namespace OrderInventory.Api.Controllers
                 .ThenInclude(oi => oi.Product)
                 .AsNoTracking();
 
-            // Filters
             if (customerId.HasValue)
                 query = query.Where(o => o.CustomerId == customerId.Value);
             if (!string.IsNullOrWhiteSpace(status))
@@ -49,7 +47,6 @@ namespace OrderInventory.Api.Controllers
             if (dateTo.HasValue)
                 query = query.Where(o => o.OrderDate <= dateTo.Value);
 
-            // Sorting Whitelist
             query = (sortBy.ToLower(), sortDirection.ToLower()) switch
             {
                 ("totalamount", "asc") => query.OrderBy(o => o.TotalAmount),
@@ -96,7 +93,6 @@ namespace OrderInventory.Api.Controllers
             return Ok(result);
         }
 
-        // GET: api/orders/{id}
         [HttpGet("{id}")]
         public async Task<ActionResult<OrderDto>> GetOrderById(int id)
         {
@@ -130,11 +126,9 @@ namespace OrderInventory.Api.Controllers
             return Ok(dto);
         }
 
-       
         [HttpPost]
-        public async Task<ActionResult<OrderDto>> CreateOrder(CreateOrderDto dto)
+        public async Task<ActionResult> CreateOrder(CreateOrderDto dto)
         {
-            // 1. Validate Customer exists
             var customerExists = await _unitOfWork.Customers.ExistsAsync(dto.CustomerId);
             if (!customerExists)
                 return BadRequest(new { message = "Customer does not exist." });
@@ -143,24 +137,29 @@ namespace OrderInventory.Api.Controllers
                 return BadRequest(new { message = "Order must contain at least one item." });
 
             var orderItems = new List<OrderItem>();
+            var stockWarnings = new List<string>();
             decimal totalAmount = 0;
 
             foreach (var itemDto in dto.Items)
             {
-                // 2. Load product and check if active & exists
                 var product = await _unitOfWork.Products.GetByIdAsync(itemDto.ProductId);
                 if (product == null || !product.IsActive)
                     return BadRequest(new { message = $"Product with ID {itemDto.ProductId} is not found or inactive." });
 
-                // 3. Validate stock availability
                 if (product.StockQuantity < itemDto.Quantity)
                     return BadRequest(new { message = $"Insufficient stock for product '{product.Name}'. Available: {product.StockQuantity}, Requested: {itemDto.Quantity}" });
 
-                // 4. Decrease product stock quantity
+                // Reduce stock quantity
                 product.StockQuantity -= itemDto.Quantity;
+
+                // Meaningful Logic check: ReorderLevel warning trigger
+                if (product.StockQuantity <= product.ReorderLevel)
+                {
+                    stockWarnings.Add($"WARNING: Product '{product.Name}' stock ({product.StockQuantity}) has dropped to or below the Reorder Level ({product.ReorderLevel}).");
+                }
+
                 _unitOfWork.Products.Update(product);
 
-                // 5. Calculate LineTotal and copy current Product.Price into OrderItem.UnitPrice (Requirement)
                 decimal lineTotal = product.Price * itemDto.Quantity;
                 totalAmount += lineTotal;
 
@@ -168,12 +167,11 @@ namespace OrderInventory.Api.Controllers
                 {
                     ProductId = product.Id,
                     Quantity = itemDto.Quantity,
-                    UnitPrice = product.Price, 
+                    UnitPrice = product.Price,
                     LineTotal = lineTotal
                 });
             }
 
-            // 6. Create Order record
             var order = new Order
             {
                 CustomerId = dto.CustomerId,
@@ -184,11 +182,8 @@ namespace OrderInventory.Api.Controllers
             };
 
             await _unitOfWork.Orders.AddAsync(order);
-
-            // 7. Persist all changes using a single Unit of Work commit (Requirement)
             await _unitOfWork.SaveChangesAsync();
 
-            // Return response DTO
             var responseDto = new OrderDto
             {
                 Id = order.Id,
@@ -207,10 +202,14 @@ namespace OrderInventory.Api.Controllers
                 }).ToList()
             };
 
-            return CreatedAtAction(nameof(GetOrderById), new { id = order.Id }, responseDto);
+            // Return order details along with stock warnings if any triggered
+            return CreatedAtAction(nameof(GetOrderById), new { id = order.Id }, new
+            {
+                Order = responseDto,
+                InventoryWarnings = stockWarnings.Any() ? stockWarnings : null
+            });
         }
 
-        
         [HttpPatch("{id}/status")]
         public async Task<IActionResult> UpdateOrderStatus(int id, UpdateOrderStatusDto dto)
         {

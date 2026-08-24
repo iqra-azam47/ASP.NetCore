@@ -9,6 +9,7 @@
         public int StockQuantity { get; set; }
         public bool IsActive { get; set; } = true;
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public int ReorderLevel { get; set; } = 5;
 
         // Foreign Key
         public int CategoryId { get; set; }

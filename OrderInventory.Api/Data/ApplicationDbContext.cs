@@ -1,5 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
-using OrderInventory.Api.Models; 
+using OrderInventory.Api.Models;
+
 namespace OrderInventory.Api.Data
 {
     public class ApplicationDbContext : DbContext
@@ -8,7 +9,6 @@ namespace OrderInventory.Api.Data
         {
         }
 
-        
         public DbSet<Category> Categories { get; set; } = null!;
         public DbSet<Product> Products { get; set; } = null!;
         public DbSet<Customer> Customers { get; set; } = null!;
@@ -27,6 +27,9 @@ namespace OrderInventory.Api.Data
                 entity.Property(p => p.SKU).IsRequired().HasMaxLength(50);
                 entity.HasIndex(p => p.SKU).IsUnique(); // Unique index requirement
                 entity.Property(p => p.Price).HasColumnType("decimal(18,2)"); // Precision for money
+
+                // Added default value for ReorderLevel so database assigns 5 automatically
+                entity.Property(p => p.ReorderLevel).HasDefaultValue(5);
             });
 
             // 2. Category configuration
@@ -66,7 +69,6 @@ namespace OrderInventory.Api.Data
                 entity.Property(oi => oi.UnitPrice).HasColumnType("decimal(18,2)");
                 entity.Property(oi => oi.LineTotal).HasColumnType("decimal(18,2)");
 
-                
                 entity.HasOne(oi => oi.Order)
                       .WithMany(o => o.OrderItems)
                       .HasForeignKey(oi => oi.OrderId)
